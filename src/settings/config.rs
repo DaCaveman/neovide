@@ -118,7 +118,26 @@ impl Config {
             env::set_var("NEOVIDE_FRAME", frame.to_string());
         }
         if let Some(neovim_bin) = &self.neovim_bin {
-            env::set_var("NEOVIM_BIN", neovim_bin.to_string_lossy().to_string());
+            // Get the path of the executable
+            let exe_path: PathBuf = match env::current_exe() {
+                Ok(path) => path,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    return Default::default();
+                },
+            };
+
+            // Get the directory of the executable
+            let path = exe_path.parent().unwrap_or_else(|| {
+                eprintln!("Failed to get the directory of the executable");
+                std::process::exit(1);
+            });
+            let path_str: &str = &path.to_path_buf().into_os_string().into_string().unwrap().to_owned();
+            let path_bin_str: &str = &neovim_bin.to_string_lossy().to_string().to_owned();
+            let str_path: &str = &(path_str.to_owned() + path_bin_str);
+
+            //env::set_var("NEOVIM_BIN", neovim_bin.to_string_lossy().to_string());
+            env::set_var("NEOVIM_BIN", str_path);
         }
         if let Some(theme) = &self.theme {
             env::set_var("NEOVIDE_THEME", theme);
@@ -164,8 +183,8 @@ fn watcher_thread(init_config: Config, event_loop_proxy: EventLoopProxy<UserEven
     if let Err(e) = debouncer.watcher().watch(
         // watching the directory rather than the config file itself to also allow it to be deleted/created later on
         config_path()
-            .parent()
-            .expect("config path to point to a file which must be in some directory"),
+        .parent()
+        .expect("config path to point to a file which must be in some directory"),
         RecursiveMode::NonRecursive,
     ) {
         log::error!("Could not watch config file, chances are it just doesn't exist: {e}");
@@ -198,7 +217,7 @@ fn watcher_thread(init_config: Config, event_loop_proxy: EventLoopProxy<UserEven
         if config.font != previous_config.font {
             event_loop_proxy
                 .send_event(UserEvent::ConfigsChanged(Box::new(HotReloadConfigs::Font(
-                    config.font.clone(),
+                                config.font.clone(),
                 ))))
                 .unwrap();
         }
