@@ -25,9 +25,25 @@ fn neovide_config_dir() -> PathBuf {
 
 #[cfg(windows)]
 fn neovide_config_dir() -> PathBuf {
-    let mut path = dirs::config_dir().unwrap();
-    path.push("neovide");
-    path
+    //let mut path = dirs::config_dir().unwrap();
+
+    // Get the path of the executable
+    let exe_path: PathBuf = match env::current_exe() {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            return Default::default();
+        },
+    };
+
+    // Get the directory of the executable
+    let path = exe_path.parent().unwrap_or_else(|| {
+        eprintln!("Failed to get the directory of the executable");
+        std::process::exit(1);
+    });
+
+    //path.push("neovide");
+    path.to_path_buf()
 }
 
 pub fn config_path() -> PathBuf {
