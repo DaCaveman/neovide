@@ -16,8 +16,7 @@ use crate::{
     },
 };
 
-//static DEFAULT_FONT: &[u8] = include_bytes!("../../../assets/fonts/FiraCodeNerdFont-Regular.ttf");
-static DEFAULT_FONT: &[u8] = include_bytes!("../../../assets/fonts/CaskaydiaCoveNerdFontMono-Regular.ttf");
+static DEFAULT_FONT: &[u8] = include_bytes!("../../../assets/fonts/FiraCodeNerdFont-Regular.ttf");
 static LAST_RESORT_FONT: &[u8] = include_bytes!("../../../assets/fonts/LastResort-Regular.ttf");
 
 pub struct FontPair {
