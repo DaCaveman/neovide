@@ -21,7 +21,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use log::{error, warn};
+use log::error;
 use skia_safe::Canvas;
 
 use winit::{
@@ -37,7 +37,7 @@ use crate::{
     profiling::{tracy_create_gpu_context, tracy_named_frame, tracy_zone},
     renderer::rendered_layer::{group_windows, FloatingLayer},
     settings::*,
-    units::{to_skia_rect, GridPos, GridRect, GridSize, PixelPos},
+    units::{to_skia_rect, GridRect, GridSize, PixelPos},
     window::{ShouldRender, UserEvent},
     WindowSettings,
 };
@@ -209,14 +209,19 @@ impl Renderer {
 
     pub fn draw_frame(&mut self, root_canvas: &Canvas, dt: f32) {
         tracy_zone!("renderer_draw_frame");
-        let default_background = self.grid_renderer.get_default_background();
+        let window_settings = SETTINGS.get::<WindowSettings>();
+        let opacity = if window_settings.normal_opacity < 1.0 {
+            window_settings.normal_opacity
+        } else {
+            window_settings.transparency
+        };
+        let default_background = self.grid_renderer.get_default_background(opacity);
         let grid_scale = self.grid_renderer.grid_scale;
 
-        let transparency = SETTINGS.get::<WindowSettings>().transparency;
         let layer_grouping = SETTINGS
             .get::<RendererSettings>()
             .experimental_layer_grouping;
-        root_canvas.clear(default_background.with_a((255.0 * transparency) as u8));
+        root_canvas.clear(default_background);
         root_canvas.save();
         root_canvas.reset_matrix();
 
@@ -290,24 +295,13 @@ impl Renderer {
         let settings = SETTINGS.get::<RendererSettings>();
         let root_window_regions = root_windows
             .into_iter()
-            .map(|window| {
-                window.draw(
-                    root_canvas,
-                    default_background.with_a((255.0 * transparency) as u8),
-                    grid_scale,
-                )
-            })
+            .map(|window| window.draw(root_canvas, default_background, grid_scale))
             .collect_vec();
 
         let floating_window_regions = floating_layers
             .into_iter()
             .flat_map(|mut layer| {
-                layer.draw(
-                    root_canvas,
-                    &settings,
-                    default_background.with_a((255.0 * transparency) as u8),
-                    grid_scale,
-                )
+                layer.draw(root_canvas, &settings, default_background, grid_scale)
             })
             .collect_vec();
 
@@ -401,9 +395,10 @@ impl Renderer {
     }
 
     pub fn prepare_lines(&mut self, force: bool) {
+        let transparency = SETTINGS.get::<WindowSettings>().transparency;
         self.rendered_windows
             .iter_mut()
-            .for_each(|(_, w)| w.prepare_lines(&mut self.grid_renderer, force));
+            .for_each(|(_, w)| w.prepare_lines(&mut self.grid_renderer, transparency, force));
     }
 
     fn handle_draw_command(&mut self, draw_command: DrawCommand, result: &mut DrawCommandResult) {
@@ -421,18 +416,11 @@ impl Renderer {
                         rendered_window.handle_window_draw_command(command);
                     }
                     Entry::Vacant(vacant_entry) => match command {
-                        WindowDrawCommand::Position {
-                            grid_position,
-                            grid_size,
-                            ..
-                        } => {
-                            let grid_position = GridPos::from(grid_position).try_cast().unwrap();
-                            let grid_size = GridSize::from(grid_size).try_cast().unwrap();
-                            let new_window = RenderedWindow::new(grid_id, grid_position, grid_size);
+                        WindowDrawCommand::Position { .. }
+                        | WindowDrawCommand::ViewportMargins { .. } => {
+                            let mut new_window = RenderedWindow::new(grid_id);
+                            new_window.handle_window_draw_command(command);
                             vacant_entry.insert(new_window);
-                        }
-                        WindowDrawCommand::ViewportMargins { .. } => {
-                            warn!("ViewportMargins recieved before window was initialized");
                         }
                         _ => {
                             let settings = SETTINGS.get::<CmdLineSettings>();
